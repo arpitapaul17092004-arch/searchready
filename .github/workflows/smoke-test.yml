@@ -5,7 +5,8 @@ name: Live Smoke Test (manual)
 # history API. Run against https://searchready.netlify.app.
 
 on:
-  workflow_dispatch:
+  push:
+    branches: [smoke]
 
 jobs:
   smoke:
