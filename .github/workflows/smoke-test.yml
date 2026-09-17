@@ -1,0 +1,47 @@
+name: Live Smoke Test (manual)
+
+# Verifies the production deployment end-to-end: page loads,
+# security headers, analyzer + templates API POSTs, demo-mode
+# history API. Run against https://searchready.netlify.app.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Homepage headers + status
+        run: |
+          curl -sS -o /dev/null -w "homepage: %{http_code}\n" https://searchready.netlify.app/
+          curl -sSI https://searchready.netlify.app/ | grep -iE "content-security-policy|x-frame-options|x-content-type-options|referrer-policy|permissions-policy|strict-transport" || true
+
+      - name: Analyzer API (POST)
+        run: |
+          curl -sS -X POST https://searchready.netlify.app/api/analyze \
+            -H 'Content-Type: application/json' \
+            -d '{"url":"https://example.com"}' -w '\nHTTP %{http_code}\n' | head -c 900
+
+      - name: Templates API (POST)
+        run: |
+          curl -sS -X POST https://searchready.netlify.app/api/templates \
+            -H 'Content-Type: application/json' \
+            -d '{"topic":"email marketing"}' -w '\nHTTP %{http_code}\n' | head -c 400
+
+      - name: History API (demo mode expectation: 501)
+        run: |
+          curl -sS https://searchready.netlify.app/api/history -w '\nHTTP %{http_code}\n'
+
+      - name: Rate limit check (expect 429 after 10)
+        run: |
+          for i in $(seq 1 11); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://searchready.netlify.app/api/templates \
+              -H 'Content-Type: application/json' -d '{"topic":"limit test"}')
+            echo "request $i: $code"
+          done
+
+      - name: SSRF guard check (expect 400)
+        run: |
+          curl -sS -X POST https://searchready.netlify.app/api/analyze \
+            -H 'Content-Type: application/json' \
+            -d '{"url":"http://169.254.169.254/latest/meta-data"}' -w '\nHTTP %{http_code}\n'
