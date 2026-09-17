@@ -1,11 +1,14 @@
-name: Live Smoke Test (manual)
+name: Live Check
 
 # Verifies the production deployment end-to-end: page loads,
 # security headers, analyzer + templates API POSTs, demo-mode
-# history API. Run against https://searchready.netlify.app.
+# history API, rate limiting, SSRF guard.
+# Runs on pushes to the live-check branch (or manually).
 
 on:
   workflow_dispatch:
+  push:
+    branches: [live-check]
 
 jobs:
   smoke:
