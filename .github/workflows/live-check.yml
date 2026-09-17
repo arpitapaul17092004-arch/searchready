@@ -31,7 +31,7 @@ jobs:
             -H 'Content-Type: application/json' \
             -d '{"topic":"email marketing"}' -w '\nHTTP %{http_code}\n' | head -c 400
 
-      - name: History API (demo mode expectation: 501)
+      - name: "History API (demo mode expectation: 501)"
         run: |
           curl -sS https://searchready.netlify.app/api/history -w '\nHTTP %{http_code}\n'
 
