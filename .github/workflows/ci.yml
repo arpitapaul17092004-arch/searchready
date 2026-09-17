@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-and-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for the secret scanner
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and run tests (unit + integration)
+        run: npm test
+
+      - name: Secret scan (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dependency audit (fail on high/critical)
+        run: npm audit --audit-level=high
+
+      - name: Check for debug leftovers
+        run: |
+          # console.error (server-side structured logging) is allowed;
+          # console.log / debugger / test backdoors are not.
+          ! grep -rn --include='*.ts' --include='*.tsx' -E 'console\.log|debugger' app lib components
+          ! grep -rn --include='*.ts' --include='*.tsx' -E '/(test|debug|admin-backdoor|seed-data)' app/api
+
+      - name: Build production bundle
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1

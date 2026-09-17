@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": [
+      "dom",
+      "esnext"
+    ],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": false,
+    "outDir": "dist-test",
+    "types": [
+      "node"
+    ]
+  },
+  "include": [
+    "lib/**/*.ts",
+    "tests/**/*.test.ts",
+    "app/api/**/*.ts",
+    "proxy.ts"
+  ]
+}
