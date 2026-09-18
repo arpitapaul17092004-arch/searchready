@@ -27,7 +27,11 @@ function buildPage(opts: {
     { length: opts.questionHeadings ?? 0 },
     (_, i) => `<h2>Question heading ${i + 1}?</h2><p>${words(50)}</p>`,
   ).join("");
-  const answer = opts.directAnswer ? `<p>${words(55, "ans")}</p>` : "";
+  const answer = opts.directAnswer
+    ? opts.entitySeo
+      ? `<p>Test page is a test resource. ${words(48, "ans")}</p>`
+      : `<p>${words(55, "ans")}</p>`
+    : "";
   const faq = opts.faqSchema
     ? `<script type="application/ld+json">{"@type":"FAQPage"}</script>`
     : "";
@@ -37,8 +41,11 @@ function buildPage(opts: {
   const entity = opts.entitySeo
     ? `<meta name="author" content="Jane Doe">
   <meta property="og:site_name" content="Test page">
+  <meta property="og:title" content="Test page">
+  <meta property="og:type" content="article">
   <meta name="twitter:site" content="@testpage">
-  <script type="application/ld+json">{"@type":"Person","name":"Jane Doe","sameAs":["https://twitter.com/janedoe"]}</script>`
+  <script type="application/ld+json">{"@type":"Person","name":"Jane Doe","sameAs":["https://twitter.com/janedoe"]}</script>
+  <script type="application/ld+json">{"@type":"Article","author":{"@type":"Person","name":"Jane Doe"},"about":{"@type":"Thing","name":"Testing"}}</script>`
     : "";
   return `<!doctype html>
 <html lang="en">
@@ -139,7 +146,9 @@ describe("analyzeHtml", () => {
     for (const item of result.checklist) {
       assert.equal(typeof item.id, "string");
       assert.ok(["high", "medium", "low"].includes(item.impact));
-      assert.ok(["seo", "ai", "entity"].includes(item.category));
+      assert.ok(
+        ["seo", "ai", "entity", "entity-aeo", "entity-geo"].includes(item.category),
+      );
       assert.ok(typeof item.fix === "string" && item.fix.length > 0);
     }
   });
@@ -182,6 +191,8 @@ describe("Entity SEO", () => {
   <meta name="description" content="${words(18, "desc")}">
   <meta name="author" content="Arpita Paul">
   <meta property="og:site_name" content="SearchReady">
+  <meta property="og:title" content="SearchReady — Unified Search Visibility Platform">
+  <meta property="og:type" content="website">
   <meta name="twitter:site" content="@searchready">
   <script type="application/ld+json">
   {
@@ -190,13 +201,14 @@ describe("Entity SEO", () => {
     "name": "SearchReady",
     "url": "https://searchready.netlify.app/",
     "sameAs": ["https://twitter.com/searchready", "https://github.com/searchready"],
+    "author": { "@type": "Person", "name": "Arpita Paul" },
     "about": { "@type": "Thing", "name": "Search engine visibility" }
   }
   </script>
 </head>
 <body>
   <h1>SearchReady — Unified Search Visibility Platform</h1>
-  <p>${words(55, "ans")}</p>
+  <p>SearchReady is a unified search visibility platform. ${words(48, "ans")}</p>
   ${words(400)}
 </body>
 </html>`;
@@ -234,7 +246,9 @@ describe("Entity SEO", () => {
 
   it("emits entity checklist items in the entity category", () => {
     const result = analyzeHtml(entityRichHtml, "https://example.com/entity");
-    const entityItems = result.checklist.filter((c) => c.category === "entity");
+    const entityItems = result.checklist.filter((c) =>
+      ["entity", "entity-aeo", "entity-geo"].includes(c.category),
+    );
     const ids = entityItems.map((c) => c.id);
     for (const expected of [
       "entity-schema",
@@ -242,6 +256,10 @@ describe("Entity SEO", () => {
       "entity-sameas",
       "entity-consistency",
       "entity-about",
+      "entity-answer-attribution",
+      "entity-schema-author",
+      "entity-definition",
+      "entity-og-metadata",
     ]) {
       assert.ok(ids.includes(expected), `missing checklist item ${expected}`);
     }
@@ -249,11 +267,53 @@ describe("Entity SEO", () => {
   });
 
   it("partial entity signals produce a partial score", () => {
-    // Author meta only: 20/100 (schema, sameAs, consistency, about missing).
+    // Author meta only: 12/100 (the entityAuthor weight).
     const html = `<html><head><title>Page</title>
       <meta name="author" content="Jane Doe">
       </head><body><p>${words(50)}</p></body></html>`;
     const result = analyzeHtml(html, "https://example.com/partial");
-    assert.equal(result.entityScore, 20);
+    assert.equal(result.entityScore, 12);
+  });
+
+  it("Entity AEO: answer attribution passes when the answer names the entity", () => {
+    // og:site_name is the only known entity; the answer block names it,
+    // so attribution (10) earns points even though nothing else passes.
+    const html = `<html><head><title>Welcome</title>
+      <meta property="og:site_name" content="Acme">
+      </head><body><h1>Welcome to our site</h1>
+      <p>According to Acme research, ${words(48, "d")}.</p>
+      </body></html>`;
+    const result = analyzeHtml(html, "https://example.com/aeo");
+    assert.equal(result.stats.hasAnswerAttribution, true);
+    assert.equal(result.entityScore, 10);
+  });
+
+  it("Entity GEO: a definitional sentence earns points on its own", () => {
+    const html = `<html><head><title>Welcome</title></head><body>
+      <p>SearchReady is a unified search visibility platform. ${words(45, "d")}</p>
+      </body></html>`;
+    const result = analyzeHtml(html, "https://example.com/geo");
+    assert.equal(result.stats.hasEntityDefinition, true);
+    assert.equal(result.entityScore, 10);
+  });
+
+  it("Entity AEO: schema author is detected from JSON-LD", () => {
+    const html = `<html><head><title>Article</title>
+      <script type="application/ld+json">{"@type":"Article","author":{"@type":"Person","name":"Jane Doe"}}</script>
+      </head><body><p>${words(50)}</p></body></html>`;
+    const result = analyzeHtml(html, "https://example.com/schema-author");
+    assert.equal(result.stats.hasSchemaAuthor, true);
+    // schema 18 + schemaAuthor 10 + named author (Person JSON-LD) 12 = 40
+    assert.equal(result.entityScore, 40);
+  });
+
+  it("Entity GEO: og:title + og:type metadata is detected", () => {
+    const html = `<html><head><title>Welcome</title>
+      <meta property="og:title" content="Welcome">
+      <meta property="og:type" content="website">
+      </head><body><p>${words(50)}</p></body></html>`;
+    const result = analyzeHtml(html, "https://example.com/og");
+    assert.equal(result.stats.hasOgEntityMetadata, true);
+    assert.equal(result.entityScore, 8);
   });
 });

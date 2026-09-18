@@ -9,7 +9,7 @@ import { parsePage, type ParsedPage } from "./dom";
  */
 
 export type Impact = "high" | "medium" | "low";
-export type Category = "seo" | "ai" | "entity";
+export type Category = "seo" | "ai" | "entity" | "entity-aeo" | "entity-geo";
 
 export interface ChecklistItem {
   id: string;
@@ -36,6 +36,10 @@ export interface AnalysisStats {
   imagesWithAlt: number;
   jsonLdTypes: string[];
   hasSameAs: boolean;
+  hasAnswerAttribution: boolean;
+  hasSchemaAuthor: boolean;
+  hasEntityDefinition: boolean;
+  hasOgEntityMetadata: boolean;
   namedAuthor: boolean;
   siteName: string | null;
 }
@@ -190,6 +194,66 @@ function hasBrandConsistency(
   return (title?.toLowerCase().includes(brand) || h1.includes(brand)) ?? false;
 }
 
+// --- Entity AEO helpers ----------------------------------------------
+// Entity AEO = answer engines (featured snippets, AI Overviews, Perplexity)
+// quoting the page WITH entity attribution — the answer carries the brand
+// or author identity instead of anonymous text.
+
+/** Collect entity display names from JSON-LD (name properties). */
+export function extractJsonLdNames(html: string): string[] {
+  const names = new Set<string>();
+  const re = /"name"\s*:\s*"([^"]{2,80})"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) names.add(m[1]);
+  return [...names];
+}
+
+/** The direct-answer block itself names the entity (brand or author). */
+function hasAnswerEntityAttribution(
+  page: ParsedPage,
+  entityNames: string[],
+): boolean {
+  const candidates = page.allTexts("p").filter((t) => t.length > 0).slice(0, 6);
+  const answerParas = candidates.filter((p) => {
+    const w = wordCount(p);
+    return w >= 40 && w <= 80;
+  });
+  const names = entityNames
+    .map((n) => n.trim().toLowerCase())
+    .filter((n) => n.length >= 2);
+  if (names.length === 0) return false;
+  return answerParas.some((p) => {
+    const lower = p.toLowerCase();
+    return names.some((n) => lower.includes(n));
+  });
+}
+
+/** Structured data ties the content to an author entity via author prop. */
+function hasSchemaAuthor(html: string): boolean {
+  return /"author"\s*:\s*(?:\{|"|\[)/.test(html);
+}
+
+// --- Entity GEO helpers ----------------------------------------------
+// Entity GEO = generative engines (ChatGPT, Gemini) synthesizing answers
+// ABOUT the entity — they favor definitional, well-grounded statements.
+
+/** A definitional sentence early on (“<Entity> is …”) — highly citable. */
+function hasEntityDefinition(page: ParsedPage): boolean {
+  const paras = page.allTexts("p").filter((t) => t.length > 0).slice(0, 3);
+  const defRe =
+    /^[A-Z][\w'’-]*(?:\s+[\w'’()\-\.]+){0,5}\s+(?:is|are|was|were|refers to|means)\b/;
+  return paras.some((p) =>
+    p.split(/(?<=[.!?])\s+/).some((sentence) => defRe.test(sentence)),
+  );
+}
+
+/** Machine-readable entity identity for AI crawlers: og:title + og:type. */
+function hasOgEntityMetadata(page: ParsedPage): boolean {
+  const ogTitle = page.attrOf('meta[property="og:title"]', "content");
+  const ogType = page.attrOf('meta[property="og:type"]', "content");
+  return Boolean(ogTitle?.trim() && ogType?.trim());
+}
+
 function hasListsOrTables(page: ParsedPage): boolean {
   return page.count("ul li, ol li, table") >= 3;
 }
@@ -236,7 +300,7 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
   const words = wordCount(page.bodyText());
   const wordsOk = words >= 300;
 
-  // --- Entity SEO signals ---
+  // --- Entity signals (SEO / AEO / GEO) ---
   const siteName =
     page.attrOf('meta[property="og:site_name"]', "content")?.trim() || null;
   const jsonLdTypes = extractJsonLdTypes(rawHtml);
@@ -245,6 +309,16 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
   const entitySameAs = hasSameAsLinks(rawHtml, page);
   const entityConsistency = hasBrandConsistency(page, title, siteName);
   const entityAbout = hasAboutOrMentions(rawHtml);
+  // Entity AEO: attribution of the answer to the entity.
+  const authorName =
+    page.attrOf('meta[name="author"]', "content")?.trim() || null;
+  const entityNames = [siteName, authorName, ...extractJsonLdNames(rawHtml)]
+    .filter((n): n is string => Boolean(n));
+  const entityAnswerAttribution = hasAnswerEntityAttribution(page, entityNames);
+  const entitySchemaAuthor = hasSchemaAuthor(rawHtml);
+  // Entity GEO: citability of statements about the entity.
+  const entityDefinition = hasEntityDefinition(page);
+  const entityOgMetadata = hasOgEntityMetadata(page);
 
   // --- SEO score signals (transparent weights, total = 100) ---
   const seoSignals: Record<string, Signal> = {
@@ -272,13 +346,22 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
     contentDepth: { passed: words >= 600, weight: 6 },
   };
 
-  // --- Entity SEO score signals (total = 100) ---
+  // --- Entity score signals (total = 100) ---
+  // Entity SEO (identity, weight 62) + Entity AEO (attribution, 20) +
+  // Entity GEO (citability, 18).
   const entitySignals: Record<string, Signal> = {
-    entitySchema: { passed: entitySchema, weight: 25 },
-    entityAuthor: { passed: entityAuthor, weight: 20 },
-    entitySameAs: { passed: entitySameAs, weight: 20 },
-    entityConsistency: { passed: entityConsistency, weight: 20 },
-    entityAbout: { passed: entityAbout, weight: 15 },
+    // Entity SEO — being an identifiable entity.
+    entitySchema: { passed: entitySchema, weight: 18 },
+    entityAuthor: { passed: entityAuthor, weight: 12 },
+    entitySameAs: { passed: entitySameAs, weight: 12 },
+    entityConsistency: { passed: entityConsistency, weight: 12 },
+    entityAbout: { passed: entityAbout, weight: 8 },
+    // Entity AEO — answer engines quote with entity attribution.
+    entityAnswerAttribution: { passed: entityAnswerAttribution, weight: 10 },
+    entitySchemaAuthor: { passed: entitySchemaAuthor, weight: 10 },
+    // Entity GEO — generative engines cite definitional, grounded content.
+    entityDefinition: { passed: entityDefinition, weight: 10 },
+    entityOgMetadata: { passed: entityOgMetadata, weight: 8 },
   };
 
   const scoreOf = (signals: Record<string, Signal>): number => {
@@ -462,6 +545,50 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
       passed: entityAbout,
     },
     {
+      id: "entity-answer-attribution",
+      title: "Entity attribution in the answer block (Entity AEO)",
+      description: entityAnswerAttribution
+        ? "The direct-answer paragraph names the brand or author, so answer engines can attribute the quote to you."
+        : "The direct-answer paragraph does not name your entity. Answer engines that quote anonymous passages strip the citation's value — attribution is what turns a mention into visibility.",
+      fix: "Rewrite the opening answer paragraph to include your brand or author name naturally (e.g. 'According to <Brand>, …' or '<Brand> is …').",
+      impact: "high",
+      category: "entity-aeo",
+      passed: entityAnswerAttribution,
+    },
+    {
+      id: "entity-schema-author",
+      title: "Author entity in structured data (Entity AEO)",
+      description: entitySchemaAuthor
+        ? "Structured data links the content to an author entity via the author property."
+        : "No author property in your JSON-LD. Featured snippets and AI Overviews favor content machine-linked to a verified author.",
+      fix: "Add an author property to your Article/FAQPage JSON-LD referencing a Person or Organization by name or @id.",
+      impact: "medium",
+      category: "entity-aeo",
+      passed: entitySchemaAuthor,
+    },
+    {
+      id: "entity-definition",
+      title: "Definitional sentence about the entity (Entity GEO)",
+      description: entityDefinition
+        ? "A '<Term> is …' style definition appears early on — the most-cited content shape in generative engines."
+        : "No definitional sentence found near the top. Generative engines (ChatGPT, Gemini) disproportionately cite clear definitions when synthesizing answers.",
+      fix: "Add a concise definition sentence near the top of the page: '<Entity> is a <category> that <key benefit>.'",
+      impact: "high",
+      category: "entity-geo",
+      passed: entityDefinition,
+    },
+    {
+      id: "entity-og-metadata",
+      title: "Machine-readable entity metadata (Entity GEO)",
+      description: entityOgMetadata
+        ? "og:title and og:type metadata found — AI crawlers read these to identify the entity."
+        : "Missing og:title or og:type metadata. AI crawlers and generative engines parse OpenGraph tags as the machine-readable identity of the page.",
+      fix: "Add og:title and og:type meta tags that mirror your page's entity name and type (e.g. og:type 'website' or 'article').",
+      impact: "low",
+      category: "entity-geo",
+      passed: entityOgMetadata,
+    },
+    {
       id: "content-depth",
       title: "Sufficient content depth (300+ words)",
       description: `The page body contains roughly ${words} words.`,
@@ -487,6 +614,10 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
     imagesWithAlt: imageWithAlt,
     jsonLdTypes,
     hasSameAs: entitySameAs,
+    hasAnswerAttribution: entityAnswerAttribution,
+    hasSchemaAuthor: entitySchemaAuthor,
+    hasEntityDefinition: entityDefinition,
+    hasOgEntityMetadata: entityOgMetadata,
     namedAuthor: entityAuthor,
     siteName,
   };

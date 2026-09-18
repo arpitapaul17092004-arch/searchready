@@ -8,9 +8,12 @@ one clear score and a prioritized, actionable checklist.
 
 - **URL Analyzer** — paste any public URL, get an overall readiness score,
   separate SEO, AI-answer, and **Entity SEO** scores, and a prioritized checklist.
-- **Entity SEO** — a dedicated score for knowledge-graph readiness: typed
-  schema.org entities, named authors, sameAs identity links, brand-name
-  consistency, and about/mentions relationships.
+- **Entity intelligence (SEO + AEO + GEO)** — a dedicated Entity score for
+  knowledge-graph readiness, across three pillars: entity identity (typed
+  schema.org entities, named authors, sameAs links, brand consistency,
+  about/mentions), entity AEO (attribution in the answer block, author in
+  structured data), and entity GEO (definitional sentences, og:title/og:type
+  metadata).
 - **Structure & content checks** — heading structure, direct short-answer
   blocks (40–80 words), FAQ detection, entity clarity, core on-page signals.
 - **Content template generator** — topic in, ready-to-use outline with

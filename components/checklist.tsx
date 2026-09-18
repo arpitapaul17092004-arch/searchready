@@ -10,12 +10,16 @@ const categoryStyles: Record<string, string> = {
   seo: "bg-brand-50 text-brand-700",
   ai: "bg-violet-50 text-violet-700",
   entity: "bg-sky-50 text-sky-700",
+  "entity-aeo": "bg-cyan-50 text-cyan-700",
+  "entity-geo": "bg-indigo-50 text-indigo-700",
 };
 
 const categoryLabels: Record<string, string> = {
   seo: "SEO",
   ai: "AI answer",
   entity: "Entity SEO",
+  "entity-aeo": "Entity AEO",
+  "entity-geo": "Entity GEO",
 };
 
 export default function Checklist({ items }: { items: ChecklistItem[] }) {

@@ -12,9 +12,9 @@ const features = [
       "Heading structure, direct short-answer blocks (40–80 words), FAQ sections, and core on-page signals.",
   },
   {
-    title: "Entity SEO",
+    title: "Entity intelligence (SEO + AEO + GEO)",
     description:
-      "A dedicated Entity score: typed schema.org entities, named authors, sameAs identity links, brand-name consistency, and about/mentions relationships — the signals knowledge graphs use.",
+      "A dedicated Entity score across three pillars — identity (typed schema.org entities, authors, sameAs links, brand consistency), answer attribution (your entity named in quoted answers and schema), and generative citability (definitional statements, machine-readable metadata).",
   },
   {
     title: "Content templates",
