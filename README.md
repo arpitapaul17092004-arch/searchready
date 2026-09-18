@@ -99,12 +99,19 @@ The repo ships with `netlify.toml` using the official Next.js runtime.
 npm run build          # verify locally first
 ```
 
-Connect the repository in the Netlify dashboard (or via the Netlify CLI):
-build command `npm run build`, publish directory `.next`, and the
-`@netlify/plugin-nextjs` plugin is applied automatically from `netlify.toml`.
+**Continuous deployment is live**: the repo is connected to Netlify via Git.
+Every push to `main` builds and deploys automatically (`netlify.toml` defines
+build command `npm run build`, publish directory `.next`, Node 20, and the
+`@netlify/plugin-nextjs` plugin). Pull requests get branch-preview URLs.
+Roll back any time from Netlify → Deploys → *Publish deploy*.
 
 Set `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the
 Netlify environment variables when you connect a real Supabase project.
+
+`.github/workflows/live-check.yml` is a manual production smoke test — push to
+a `live-check` branch or run it from the Actions tab to re-verify the live
+site (pages, security headers, analyzer/templates APIs, rate limiting, SSRF
+guard).
 
 ### Production notes
 
