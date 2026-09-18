@@ -11,6 +11,7 @@ export interface HistoryEntry {
   overallScore: number;
   seoScore: number;
   aiAnswerScore: number;
+  entityScore?: number; // optional: entries saved before Entity SEO existed
   note?: string; // visibility log entry
 }
 

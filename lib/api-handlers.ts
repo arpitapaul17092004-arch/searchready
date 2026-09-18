@@ -140,6 +140,7 @@ interface HistoryRow {
   overall_score: number;
   seo_score: number;
   ai_answer_score: number;
+  entity_score: number | null;
   analyzed_at: string;
 }
 
@@ -184,7 +185,9 @@ export async function handleHistoryGet(
 
   const { data, error } = await auth.client
     .from("analyses")
-    .select("id, url, overall_score, seo_score, ai_answer_score, analyzed_at")
+    .select(
+      "id, url, overall_score, seo_score, ai_answer_score, entity_score, analyzed_at",
+    )
     .eq("user_id", auth.userId)
     .order("analyzed_at", { ascending: false })
     .limit(MAX_HISTORY);
@@ -203,6 +206,7 @@ export async function handleHistoryGet(
     overallScore: row.overall_score,
     seoScore: row.seo_score,
     aiAnswerScore: row.ai_answer_score,
+    entityScore: row.entity_score ?? undefined,
     analyzedAt: row.analyzed_at,
   }));
   return { status: 200, body: { entries } };
@@ -236,6 +240,7 @@ export async function handleHistoryPost(
     overallScore?: unknown;
     seoScore?: unknown;
     aiAnswerScore?: unknown;
+    entityScore?: unknown;
   } | null;
   const url = typeof body?.url === "string" ? body.url : "";
   const scores = [body?.overallScore, body?.seoScore, body?.aiAnswerScore];
@@ -256,6 +261,7 @@ export async function handleHistoryPost(
       overall_score: body?.overallScore as number,
       seo_score: body?.seoScore as number,
       ai_answer_score: body?.aiAnswerScore as number,
+      entity_score: body?.entityScore as number | undefined,
       analyzed_at: new Date().toISOString(),
     },
     { onConflict: "user_id,url" },

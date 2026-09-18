@@ -9,7 +9,7 @@ import { parsePage, type ParsedPage } from "./dom";
  */
 
 export type Impact = "high" | "medium" | "low";
-export type Category = "seo" | "ai";
+export type Category = "seo" | "ai" | "entity";
 
 export interface ChecklistItem {
   id: string;
@@ -34,6 +34,10 @@ export interface AnalysisStats {
   hasStructuredData: boolean;
   imageCount: number;
   imagesWithAlt: number;
+  jsonLdTypes: string[];
+  hasSameAs: boolean;
+  namedAuthor: boolean;
+  siteName: string | null;
 }
 
 export interface AnalysisResult {
@@ -43,6 +47,7 @@ export interface AnalysisResult {
   overallScore: number;
   seoScore: number;
   aiAnswerScore: number;
+  entityScore: number;
   checklist: ChecklistItem[];
   summary: string;
   stats: AnalysisStats;
@@ -106,14 +111,83 @@ function imageAltCoverage(page: ParsedPage): { total: number; withAlt: number } 
   return { total, withAlt };
 }
 
-function hasEntityClarity(page: ParsedPage, html: string): boolean {
-  const author =
+// --- Entity SEO helpers ---------------------------------------------
+// Entity SEO = making the page understandable as being *about* specific,
+// identifiable entities (brand, author, topic) for knowledge graphs.
+
+/** schema.org types that declare a real-world entity on the page. */
+const ENTITY_SCHEMA_TYPES = [
+  "Organization",
+  "Person",
+  "LocalBusiness",
+  "Article",
+  "NewsArticle",
+  "BlogPosting",
+  "Product",
+  "FAQPage",
+  "WebSite",
+  "WebPage",
+  "AboutPage",
+  "ContactPage",
+  "BreadcrumbList",
+  "HowTo",
+  "Event",
+  "Place",
+];
+
+/** Extract @type values from JSON-LD blocks in raw HTML. */
+export function extractJsonLdTypes(html: string): string[] {
+  const types = new Set<string>();
+  const re = /"@type"\s*:\s*(?:"([^"]+)"|\[([^\]]*)\])/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    if (m[1]) types.add(m[1]);
+    if (m[2]) {
+      for (const part of m[2].split(",")) {
+        const t = part.replace(/["'\s]/g, "");
+        if (t) types.add(t);
+      }
+    }
+  }
+  return [...types];
+}
+
+function hasTypedEntitySchema(jsonLdTypes: string[]): boolean {
+  return jsonLdTypes.some((t) => ENTITY_SCHEMA_TYPES.includes(t));
+}
+
+/** External identity links: JSON-LD sameAs URLs or twitter:site meta. */
+function hasSameAsLinks(html: string, page: ParsedPage): boolean {
+  const jsonLdSameAs = /"sameAs"\s*:\s*"https?:\/\/"/.test(html) ||
+    /"sameAs"\s*:\s*\[\s*"https?:\/\//.test(html);
+  const twitterSite = page.attrOf('meta[name="twitter:site"]', "content");
+  return jsonLdSameAs || Boolean(twitterSite?.trim());
+}
+
+/** A named human/organizational author for the content. */
+function hasNamedAuthor(page: ParsedPage, html: string): boolean {
+  const meta =
     page.attrOf('meta[name="author"]', "content") ??
     page.attrOf('meta[property="article:author"]', "content");
-  const organization = page.attrOf('meta[property="og:site_name"]', "content");
-  const hasJsonLdIdentity =
-    /"Organization"/.test(html) || /"Person"/.test(html) || /"about"/.test(html);
-  return Boolean(author?.trim() || organization?.trim() || hasJsonLdIdentity);
+  if (meta?.trim()) return true;
+  return /"Person"[\s\S]{0,200}?"name"/.test(html);
+}
+
+/** JSON-LD about/mentions pointing at recognized entities. */
+function hasAboutOrMentions(html: string): boolean {
+  return /"(?:about|mentions)"\s*:\s*(?:\{|"|\[)/.test(html);
+}
+
+/** Brand name from og:site_name reused in title or H1 — consistent naming. */
+function hasBrandConsistency(
+  page: ParsedPage,
+  title: string | null,
+  siteName: string | null,
+): boolean {
+  if (!siteName || siteName.trim().length < 2) return false;
+  const brand = siteName.trim().toLowerCase();
+  const h1 = (page.textOf("h1") || "").toLowerCase();
+  return (title?.toLowerCase().includes(brand) || h1.includes(brand)) ?? false;
 }
 
 function hasListsOrTables(page: ParsedPage): boolean {
@@ -157,11 +231,20 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
   const indexable = robotsAllowsIndexing(page);
   const { total: imageTotal, withAlt: imageWithAlt } = imageAltCoverage(page);
   const imagesOk = imageTotal === 0 ? false : imageWithAlt / imageTotal >= 0.8;
-  const entityClarity = hasEntityClarity(page, rawHtml);
   const listsTables = hasListsOrTables(page);
   const qHeadings = questionHeadingCount(page);
   const words = wordCount(page.bodyText());
   const wordsOk = words >= 300;
+
+  // --- Entity SEO signals ---
+  const siteName =
+    page.attrOf('meta[property="og:site_name"]', "content")?.trim() || null;
+  const jsonLdTypes = extractJsonLdTypes(rawHtml);
+  const entitySchema = hasTypedEntitySchema(jsonLdTypes);
+  const entityAuthor = hasNamedAuthor(page, rawHtml);
+  const entitySameAs = hasSameAsLinks(rawHtml, page);
+  const entityConsistency = hasBrandConsistency(page, title, siteName);
+  const entityAbout = hasAboutOrMentions(rawHtml);
 
   // --- SEO score signals (transparent weights, total = 100) ---
   const seoSignals: Record<string, Signal> = {
@@ -178,14 +261,24 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
   };
 
   // --- AI-answer score signals (total = 100) ---
+  // Entity signals live in their own entity score, so the AI score now
+  // weighs answer-shape signals only.
   const aiSignals: Record<string, Signal> = {
-    directAnswer: { passed: directAnswer, weight: 25 },
-    faq: { passed: faq, weight: 22 },
-    structuredData: { passed: structured, weight: 15 },
-    questionHeadings: { passed: qHeadings >= 3, weight: 14 },
-    listsTables: { passed: listsTables, weight: 10 },
-    entityClarity: { passed: entityClarity, weight: 8 },
+    directAnswer: { passed: directAnswer, weight: 27 },
+    faq: { passed: faq, weight: 24 },
+    structuredData: { passed: structured, weight: 17 },
+    questionHeadings: { passed: qHeadings >= 3, weight: 15 },
+    listsTables: { passed: listsTables, weight: 11 },
     contentDepth: { passed: words >= 600, weight: 6 },
+  };
+
+  // --- Entity SEO score signals (total = 100) ---
+  const entitySignals: Record<string, Signal> = {
+    entitySchema: { passed: entitySchema, weight: 25 },
+    entityAuthor: { passed: entityAuthor, weight: 20 },
+    entitySameAs: { passed: entitySameAs, weight: 20 },
+    entityConsistency: { passed: entityConsistency, weight: 20 },
+    entityAbout: { passed: entityAbout, weight: 15 },
   };
 
   const scoreOf = (signals: Record<string, Signal>): number => {
@@ -199,7 +292,10 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
 
   const seoScore = scoreOf(seoSignals);
   const aiAnswerScore = scoreOf(aiSignals);
-  const overallScore = Math.round((seoScore + aiAnswerScore) / 2);
+  const entityScore = scoreOf(entitySignals);
+  const overallScore = Math.round(
+    (seoScore + aiAnswerScore + entityScore) / 3,
+  );
 
   // --- Checklist ---
   const checklist: ChecklistItem[] = [
@@ -309,15 +405,61 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
       passed: seoSignals.images.passed,
     },
     {
-      id: "entity-clarity",
-      title: "Entity clarity (author / organization signals)",
-      description: entityClarity
-        ? "Author or organization identity signals were found."
-        : "No author or organization identity found — AI engines favor content with a clear, attributable source.",
-      fix: "Add meta author tags, an about-the-author block, or Organization JSON-LD.",
+      id: "entity-schema",
+      title: "Entity schema (typed JSON-LD)",
+      description: entitySchema
+        ? `Typed structured data found (${jsonLdTypes.slice(0, 4).join(", ")}${jsonLdTypes.length > 4 ? "…" : ""}).`
+        : "No typed entity schema found. Knowledge graphs identify pages through schema.org types like Organization, Person, or Article.",
+      fix: "Add JSON-LD with a specific @type (Organization, Person, Article, Product…) describing who is behind the page and what it is about.",
+      impact: "high",
+      category: "entity",
+      passed: entitySchema,
+    },
+    {
+      id: "entity-author",
+      title: "Named author entity",
+      description: entityAuthor
+        ? "A named author (or authoring organization) was found."
+        : "No named author found. Content with an attributable author ranks better for entity-based queries and E-E-A-T.",
+      fix: "Add an author meta tag or Person JSON-LD with a name, plus a visible about-the-author block.",
       impact: "medium",
-      category: "ai",
-      passed: entityClarity,
+      category: "entity",
+      passed: entityAuthor,
+    },
+    {
+      id: "entity-sameas",
+      title: "Entity identity links (sameAs)",
+      description: entitySameAs
+        ? "External identity links found (sameAs URLs or twitter:site)."
+        : "No sameAs identity links found. These connect your entity to authoritative profiles (social, Wikipedia, Wikidata).",
+      fix: "Add a sameAs array in your Organization/Person JSON-LD pointing to your social profiles and other canonical entity references.",
+      impact: "medium",
+      category: "entity",
+      passed: entitySameAs,
+    },
+    {
+      id: "entity-consistency",
+      title: "Brand name consistency",
+      description: entityConsistency
+        ? `The site name${siteName ? ` (${siteName})` : ""} is used consistently in the title or H1.`
+        : siteName
+          ? `The site name (${siteName}) does not appear in the title or H1 — inconsistent entity naming weakens recognition.`
+          : "No site/brand name found (og:site_name missing), so the page's entity is unnamed.",
+      fix: "Set og:site_name and reuse the exact brand name in the title tag and H1 so all entity references match.",
+      impact: "medium",
+      category: "entity",
+      passed: entityConsistency,
+    },
+    {
+      id: "entity-about",
+      title: "Entity relationships (about / mentions)",
+      description: entityAbout
+        ? "The structured data links the page to other entities via about/mentions."
+        : "No about/mentions relationships found. They tell knowledge graphs what entities the content relates to.",
+      fix: "Add about (primary topic) and mentions (related entities) properties to your JSON-LD, referencing entities by URL or @id.",
+      impact: "low",
+      category: "entity",
+      passed: entityAbout,
     },
     {
       id: "content-depth",
@@ -343,6 +485,10 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
     hasStructuredData: structured,
     imageCount: imageTotal,
     imagesWithAlt: imageWithAlt,
+    jsonLdTypes,
+    hasSameAs: entitySameAs,
+    namedAuthor: entityAuthor,
+    siteName,
   };
 
   return {
@@ -352,6 +498,7 @@ export function analyzeHtml(html: string, url: string, finalUrl = url): Analysis
     overallScore,
     seoScore,
     aiAnswerScore,
+    entityScore,
     checklist,
     summary: generateSummary(overallScore),
     stats,

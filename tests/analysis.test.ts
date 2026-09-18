@@ -1,7 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parsePage } from "../lib/dom";
-import { analyzeHtml, checkDirectAnswer, checkFaq, generateSummary } from "../lib/analysis";
+import {
+  analyzeHtml,
+  checkDirectAnswer,
+  checkFaq,
+  extractJsonLdTypes,
+  generateSummary,
+} from "../lib/analysis";
 
 const words = (n: number, seed = "word") =>
   Array.from({ length: n }, (_, i) => `${seed}${i}`).join(" ");
@@ -14,6 +20,7 @@ function buildPage(opts: {
   directAnswer?: boolean;
   faqSchema?: boolean;
   structuredData?: boolean;
+  entitySeo?: boolean;
   bodyWords?: number;
 }): string {
   const headings = Array.from(
@@ -27,6 +34,12 @@ function buildPage(opts: {
   const sd = opts.structuredData
     ? `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article"}</script>`
     : "";
+  const entity = opts.entitySeo
+    ? `<meta name="author" content="Jane Doe">
+  <meta property="og:site_name" content="Test page">
+  <meta name="twitter:site" content="@testpage">
+  <script type="application/ld+json">{"@type":"Person","name":"Jane Doe","sameAs":["https://twitter.com/janedoe"]}</script>`
+    : "";
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -36,6 +49,7 @@ function buildPage(opts: {
   ${opts.metaDescription ? `<meta name="description" content="${opts.metaDescription}">` : ""}
   <link rel="canonical" href="https://example.com/page">
   ${sd}
+  ${entity}
 </head>
 <body>
   ${opts.h1 === false ? "" : "<h1>Test page heading</h1>"}
@@ -91,6 +105,7 @@ describe("analyzeHtml", () => {
         directAnswer: true,
         faqSchema: true,
         structuredData: true,
+        entitySeo: true,
         bodyWords: 800,
       }),
       "https://example.com/page",
@@ -111,7 +126,11 @@ describe("analyzeHtml", () => {
     const result = analyzeHtml(buildPage({ title: "Short" }), "https://example.com/x");
     assert.ok(result.seoScore >= 0 && result.seoScore <= 100);
     assert.ok(result.aiAnswerScore >= 0 && result.aiAnswerScore <= 100);
-    assert.equal(result.overallScore, Math.round((result.seoScore + result.aiAnswerScore) / 2));
+    assert.ok(result.entityScore >= 0 && result.entityScore <= 100);
+    assert.equal(
+      result.overallScore,
+      Math.round((result.seoScore + result.aiAnswerScore + result.entityScore) / 3),
+    );
   });
 
   it("produces a complete checklist", () => {
@@ -120,7 +139,7 @@ describe("analyzeHtml", () => {
     for (const item of result.checklist) {
       assert.equal(typeof item.id, "string");
       assert.ok(["high", "medium", "low"].includes(item.impact));
-      assert.ok(["seo", "ai"].includes(item.category));
+      assert.ok(["seo", "ai", "entity"].includes(item.category));
       assert.ok(typeof item.fix === "string" && item.fix.length > 0);
     }
   });
@@ -152,5 +171,89 @@ describe("generateSummary", () => {
     assert.ok(generateSummary(70).includes("Good foundation"));
     assert.ok(generateSummary(50).includes("Needs work"));
     assert.ok(generateSummary(10).includes("Poor readiness"));
+  });
+});
+
+describe("Entity SEO", () => {
+  const entityRichHtml = `<!doctype html>
+<html lang="en">
+<head>
+  <title>SearchReady — Unified Search Visibility Platform</title>
+  <meta name="description" content="${words(18, "desc")}">
+  <meta name="author" content="Arpita Paul">
+  <meta property="og:site_name" content="SearchReady">
+  <meta name="twitter:site" content="@searchready">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "SearchReady",
+    "url": "https://searchready.netlify.app/",
+    "sameAs": ["https://twitter.com/searchready", "https://github.com/searchready"],
+    "about": { "@type": "Thing", "name": "Search engine visibility" }
+  }
+  </script>
+</head>
+<body>
+  <h1>SearchReady — Unified Search Visibility Platform</h1>
+  <p>${words(55, "ans")}</p>
+  ${words(400)}
+</body>
+</html>`;
+
+  it("extracts @type values from JSON-LD", () => {
+    assert.deepEqual(
+      extractJsonLdTypes('{"@type":"Organization"}'),
+      ["Organization"],
+    );
+    assert.deepEqual(
+      extractJsonLdTypes('{"@type":["Person","Article"]}').sort(),
+      ["Article", "Person"],
+    );
+    assert.deepEqual(extractJsonLdTypes("<html></html>"), []);
+  });
+
+  it("scores an entity-rich page 100 on the entity dimension", () => {
+    const result = analyzeHtml(entityRichHtml, "https://example.com/entity");
+    assert.equal(result.entityScore, 100);
+    assert.ok(result.stats.jsonLdTypes.includes("Organization"));
+    assert.equal(result.stats.namedAuthor, true);
+    assert.equal(result.stats.hasSameAs, true);
+    assert.equal(result.stats.siteName, "SearchReady");
+  });
+
+  it("scores a bare page 0 on the entity dimension", () => {
+    const result = analyzeHtml(
+      "<html><head><title>Just a page</title></head><body><p>hello</p></body></html>",
+      "https://example.com/bare",
+    );
+    assert.equal(result.entityScore, 0);
+    assert.deepEqual(result.stats.jsonLdTypes, []);
+    assert.equal(result.stats.namedAuthor, false);
+  });
+
+  it("emits entity checklist items in the entity category", () => {
+    const result = analyzeHtml(entityRichHtml, "https://example.com/entity");
+    const entityItems = result.checklist.filter((c) => c.category === "entity");
+    const ids = entityItems.map((c) => c.id);
+    for (const expected of [
+      "entity-schema",
+      "entity-author",
+      "entity-sameas",
+      "entity-consistency",
+      "entity-about",
+    ]) {
+      assert.ok(ids.includes(expected), `missing checklist item ${expected}`);
+    }
+    assert.ok(entityItems.every((c) => c.passed));
+  });
+
+  it("partial entity signals produce a partial score", () => {
+    // Author meta only: 20/100 (schema, sameAs, consistency, about missing).
+    const html = `<html><head><title>Page</title>
+      <meta name="author" content="Jane Doe">
+      </head><body><p>${words(50)}</p></body></html>`;
+    const result = analyzeHtml(html, "https://example.com/partial");
+    assert.equal(result.entityScore, 20);
   });
 });

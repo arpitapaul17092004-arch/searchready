@@ -9,6 +9,13 @@ const impactStyles: Record<string, string> = {
 const categoryStyles: Record<string, string> = {
   seo: "bg-brand-50 text-brand-700",
   ai: "bg-violet-50 text-violet-700",
+  entity: "bg-sky-50 text-sky-700",
+};
+
+const categoryLabels: Record<string, string> = {
+  seo: "SEO",
+  ai: "AI answer",
+  entity: "Entity SEO",
 };
 
 export default function Checklist({ items }: { items: ChecklistItem[] }) {
@@ -40,7 +47,7 @@ export default function Checklist({ items }: { items: ChecklistItem[] }) {
               </span>
             )}
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${categoryStyles[item.category]}`}>
-              {item.category === "seo" ? "SEO" : "AI answer"}
+              {categoryLabels[item.category]}
             </span>
           </div>
           <p className="mt-2 text-sm text-slate-600">{item.description}</p>

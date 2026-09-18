@@ -155,6 +155,7 @@ export default function DashboardPage() {
                 <th className="px-4 py-3 font-medium">Overall</th>
                 <th className="px-4 py-3 font-medium">SEO</th>
                 <th className="px-4 py-3 font-medium">AI answer</th>
+                <th className="px-4 py-3 font-medium">Entity</th>
                 <th className="px-4 py-3 font-medium">Last analyzed</th>
                 <th className="px-4 py-3 font-medium">Actions</th>
               </tr>
@@ -168,6 +169,7 @@ export default function DashboardPage() {
                   <td className="px-4 py-3 font-bold tabular-nums">{entry.overallScore}</td>
                   <td className="px-4 py-3 tabular-nums">{entry.seoScore}</td>
                   <td className="px-4 py-3 tabular-nums">{entry.aiAnswerScore}</td>
+                  <td className="px-4 py-3 tabular-nums">{entry.entityScore ?? "—"}</td>
                   <td className="px-4 py-3 text-slate-500">
                     {new Date(entry.analyzedAt).toLocaleString()}
                   </td>

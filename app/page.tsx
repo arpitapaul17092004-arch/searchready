@@ -9,7 +9,12 @@ const features = [
   {
     title: "Structure & content checks",
     description:
-      "Heading structure, direct short-answer blocks (40–80 words), FAQ sections, entity clarity, and core on-page signals.",
+      "Heading structure, direct short-answer blocks (40–80 words), FAQ sections, and core on-page signals.",
+  },
+  {
+    title: "Entity SEO",
+    description:
+      "A dedicated Entity score: typed schema.org entities, named authors, sameAs identity links, brand-name consistency, and about/mentions relationships — the signals knowledge graphs use.",
   },
   {
     title: "Content templates",

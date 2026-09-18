@@ -40,6 +40,7 @@ export default function AnalyzePage() {
         overallScore: analysis.overallScore,
         seoScore: analysis.seoScore,
         aiAnswerScore: analysis.aiAnswerScore,
+        entityScore: analysis.entityScore,
       });
       // …and best-effort server sync (no-op in demo mode / logged out).
       fetch("/api/history", {
@@ -50,6 +51,7 @@ export default function AnalyzePage() {
           overallScore: analysis.overallScore,
           seoScore: analysis.seoScore,
           aiAnswerScore: analysis.aiAnswerScore,
+          entityScore: analysis.entityScore,
         }),
       }).catch(() => undefined);
     } catch (err) {
@@ -95,10 +97,11 @@ export default function AnalyzePage() {
       {result && (
         <div className="mt-8 space-y-8">
           <div>
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               <ScoreCard label="Overall readiness" score={result.overallScore} />
               <ScoreCard label="SEO score" score={result.seoScore} />
               <ScoreCard label="AI-answer score" score={result.aiAnswerScore} />
+              <ScoreCard label="Entity score" score={result.entityScore} />
             </div>
             <p className="mt-4 rounded-lg border border-slate-200 bg-white p-4 text-slate-700">
               {result.summary}
