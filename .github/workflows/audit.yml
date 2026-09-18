@@ -1,0 +1,94 @@
+name: Post-Deploy Audit
+
+# Runs Lighthouse (performance, accessibility, best practices, SEO) and a
+# light load check against the live site after every production deploy.
+# Thresholds are deliberately generous starting points — tighten them as
+# the product matures.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "17 6 * * *" # daily, off the hour
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for the Netlify auto-deploy to finish
+        run: sleep 300
+
+      - name: "Verify the site is up before auditing"
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" https://searchready.netlify.app/)
+          echo "HTTP $code"
+          test "$code" = "200"
+
+      - name: "Run Lighthouse (performance + accessibility + best practices + SEO)"
+        run: |
+          CHROME=$(which google-chrome-stable || which google-chrome || which chromium-browser || which chromium)
+          echo "Using Chrome at: $CHROME"
+          npx --yes lighthouse@12 https://searchready.netlify.app/ \
+            --chrome-flags="--headless=new --no-sandbox" \
+            --output=json --output=html \
+            --output-path=lighthouse \
+            --only-categories=performance,accessibility,best-practices,seo
+
+      - name: "Report scores and flag below-threshold results"
+        run: |
+          echo "== Lighthouse scores =="
+          for cat in performance accessibility best-practices seo; do
+            score=$(jq -r ".categories[\"$cat\"].score" lighthouse.report.json)
+            pct=$(jq -r ".categories[\"$cat\"].score * 100 | round" lighthouse.report.json)
+            echo "$cat: $pct/100"
+          done
+          echo
+          echo "== Key metrics =="
+          jq -r '"LCP (s): \(.audits["largest-contentful-paint"].displayValue)"' lighthouse.report.json
+          jq -r '"CLS: \(.audits["cumulative-layout-shift"].displayValue)"' lighthouse.report.json
+          jq -r '"TBT (ms): \(.audits["total-blocking-time"].displayValue)"' lighthouse.report.json
+          echo
+          FAIL=0
+          check() {
+            score=$(jq -r ".categories[\"$1\"].score" lighthouse.report.json)
+            if [ "$score" = "null" ] || [ -z "$score" ]; then
+              echo "::warning::Lighthouse $1 score missing — audit may have degraded"
+              FAIL=1
+              return
+            fi
+            if awk "BEGIN{exit !($score < $2)}"; then
+              echo "::warning::Lighthouse $1 score $score is below the $2 threshold"
+              FAIL=1
+            fi
+          }
+          check performance 0.50
+          check accessibility 0.80
+          check best-practices 0.75
+          check seo 0.80
+          if [ "$FAIL" = "1" ]; then
+            echo "One or more scores are below threshold — see the uploaded report for opportunities."
+            exit 1
+          fi
+          echo "All Lighthouse scores meet their thresholds."
+
+      - name: "Light load check (60 sequential requests to the homepage)"
+        run: |
+          for i in $(seq 1 60); do
+            curl -s -o /dev/null -w "%{time_total}\n" https://searchready.netlify.app/
+          done | sort -n | awk '{a[NR]=$1; s+=$1} END {
+            printf "n=%d  avg=%.0fms  median=%.0fms  p95=%.0fms\n", NR, s/NR*1000, a[int(NR/2)]*1000, a[int(NR*0.95)+1]*1000
+          }'
+
+      - name: "Upload Lighthouse reports"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: |
+            lighthouse.report.json
+            lighthouse.report.html
+          retention-days: 30
