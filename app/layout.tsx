@@ -41,7 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <footer className="border-t border-slate-200 bg-white">
           <div className="mx-auto max-w-6xl px-4 py-6 text-sm text-slate-500">
             SearchReady — one clear system for SEO, GEO and AEO readiness. Honest
-            analysis: no fake guarantees of rankings or AI citations.
+            analysis: no fake guarantees of rankings or AI citations. v1.0.1
           </div>
         </footer>
       </body>
