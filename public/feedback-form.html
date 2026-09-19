@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Feedback</title>
+    <meta http-equiv="refresh" content="0;url=/feedback" />
+  </head>
+  <body>
+    <!--
+      Static registration form for Netlify Forms. The interactive page at
+      /feedback POSTs to "/" with form-name=feedback; Netlify needs the form
+      markup present in a served HTML file at deploy time to register it.
+      Keeping it in this static file (not in the Next.js app) avoids a build
+      failure in @netlify/plugin-nextjs when data-netlify markup is compiled
+      into a Next.js page.
+    -->
+    <form
+      name="feedback"
+      method="POST"
+      data-netlify="true"
+      netlify-honeypot="bot-field"
+      hidden
+    >
+      <input type="text" name="rating" />
+      <input type="text" name="worked" />
+      <input type="text" name="problems" />
+      <input type="text" name="email" />
+    </form>
+    <p>Redirecting to the feedback page…</p>
+    <script>window.location.replace("/feedback");</script>
+  </body>
+</html>
