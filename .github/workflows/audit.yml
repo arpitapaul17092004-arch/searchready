@@ -83,6 +83,19 @@ jobs:
             printf "n=%d  avg=%.0fms  median=%.0fms  p95=%.0fms\n", NR, s/NR*1000, a[int(NR/2)]*1000, a[int(NR*0.95)+1]*1000
           }'
 
+      - name: "Concurrent burst (20 parallel users, 3 rounds)"
+        run: |
+          for round in 1 2 3; do
+            start=$(date +%s%3N)
+            seq 1 20 | xargs -P 20 -I{} curl -s -o /dev/null -w "%{time_total} %{http_code}\n" https://searchready.netlify.app/ > burst.txt
+            end=$(date +%s%3N)
+            non200=$(grep -cv " 200$" burst.txt || true)
+            avg=$(awk '{s+=$1} END {printf "%.0f", s/NR*1000}' burst.txt)
+            max=$(sort -n burst.txt | tail -1 | awk '{printf "%.0f", $1*1000}')
+            echo "round $round: 20 parallel requests, non-200=$non200, avg=${avg}ms, slowest=${max}ms, wall=$((end-start))ms"
+            test "$non200" = "0"
+          done
+
       - name: "Upload Lighthouse reports"
         if: always()
         uses: actions/upload-artifact@v4

@@ -4,6 +4,17 @@ All notable changes to SearchReady are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); the project uses
 MAJOR.MINOR.PATCH versioning.
 
+## [1.3.0] — 2026-09-19
+
+### Added
+
+- **Feedback page** (`/feedback`, linked from the footer) for live-user
+  testing — backed by Netlify Forms; submissions land in the Netlify
+  dashboard (free tier, 100/month).
+- **Concurrent burst load check** in the post-deploy audit: 20 parallel
+  users × 3 rounds, in addition to the sequential 60-request check.
+- Feedback-form smoke test in the Live Check workflow.
+
 ## [1.2.0] — 2026-09-18
 
 ### Added
