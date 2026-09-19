@@ -52,7 +52,7 @@ jobs:
       - name: Feedback page + form submission (Netlify Forms)
         run: |
           curl -sS -o /dev/null -w "feedback page: %{http_code}\n" https://searchready.netlify.app/feedback
-          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST https://searchready.netlify.app/ \
+          code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST https://searchready.netlify.app/feedback-form.html \
             --data-urlencode 'form-name=feedback' \
             --data-urlencode 'rating=5' \
             --data-urlencode 'worked=Automated live check — please ignore/delete this test entry' \

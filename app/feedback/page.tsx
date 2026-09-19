@@ -38,7 +38,7 @@ export default function FeedbackPage() {
       email,
     });
     try {
-      const res = await fetch("/", {
+      const res = await fetch("/feedback-form.html", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: body.toString(),
