@@ -3,9 +3,11 @@
 import { useState, type FormEvent } from "react";
 
 /**
- * Tester / user feedback page (bisect test: plain controlled form,
- * no Netlify Forms markup — that is added back once the build
- * failure is isolated).
+ * Tester / user feedback page. The hidden static form below is what
+ * Netlify's deploy scanner registers; the interactive form POSTs the
+ * same fields urlencoded to "/" with `form-name`. NOTE: data-netlify
+ * attributes are kept ONLY on the hidden static form — putting them
+ * on the interactive form breaks the Netlify build (plugin 5.16.0).
  */
 
 const RATINGS = [
@@ -67,6 +69,15 @@ export default function FeedbackPage() {
         You tested SearchReady — now tell us how it went. It takes under a
         minute, and every note is read.
       </p>
+
+      {/* Static form so Netlify registers the "feedback" form at deploy time. */}
+      <form name="feedback" data-netlify="true" netlify-honeypot="bot-field" hidden>
+        <input type="text" name="rating" />
+        <input type="text" name="worked" />
+        <input type="text" name="problems" />
+        <input type="text" name="email" />
+        <input type="text" name="bot-field" />
+      </form>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-6">
         <fieldset>
