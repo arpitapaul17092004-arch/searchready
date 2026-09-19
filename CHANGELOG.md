@@ -4,6 +4,29 @@ All notable changes to SearchReady are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/); the project uses
 MAJOR.MINOR.PATCH versioning.
 
+## [1.3.1] — 2026-09-19
+
+### Fixed
+
+- **Netlify build failures (exit code 2)**: `data-netlify` form markup
+  compiled into a Next.js page breaks the Netlify build. The feedback
+  form is now registered via a plain static file
+  (`public/feedback-form.html`) that Netlify's deploy scanner picks up
+  without touching the Next build.
+- Form submissions now POST to the form's own path
+  (`/feedback-form.html`) — Netlify only accepts AJAX submissions at
+  the URL where the form markup lives.
+- Node 20 → 22 in CI and Netlify build config (Node 20 is being
+  dropped by build platforms; `node --test` also no longer accepts a
+  bare directory argument).
+- Concurrent burst check in the audit tolerates transient network
+  blips (up to 3 of 60 requests) instead of failing on the first one.
+
+### Changed
+
+- `@netlify/plugin-nextjs` pinned to 5.15.13 as a devDependency for
+  reproducible builds.
+
 ## [1.3.0] — 2026-09-19
 
 ### Added
