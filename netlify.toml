@@ -6,6 +6,8 @@
   NODE_VERSION = "22"
 
 [[plugins]]
-  # Pinned: 5.16.0 (released 2026-09-17) breaks the build with exit code 2.
-  # Unpin only after verifying 5.16.x compatibility.
-  package = "@netlify/plugin-nextjs@5.15.13"
+  # Version is pinned via the devDependency in package.json
+  # (@netlify/plugin-nextjs 5.15.13). 5.16.0 (released 2026-09-17)
+  # breaks the build with exit code 2. Unpin only after verifying
+  # 5.16.x compatibility.
+  package = "@netlify/plugin-nextjs"
