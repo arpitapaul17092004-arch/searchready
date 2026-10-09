@@ -12,21 +12,21 @@
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
-    "@supabase/supabase-js": "^2.116.0",
+    "@supabase/supabase-js": "^2.117.2",
     "css-select": "5.1.0",
     "domutils": "3.1.0",
     "htmlparser2": "9.1.0",
-    "next": "^16.3.5",
+    "next": "^16.3.8",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
   "devDependencies": {
-    "@netlify/plugin-nextjs": "^5.15.13",
+    "@netlify/plugin-nextjs": "^5.16.2",
     "@types/node": "20.14.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "autoprefixer": "10.4.19",
-    "postcss": "^8.5.28",
+    "autoprefixer": "10.6.1",
+    "postcss": "^8.5.29",
     "tailwindcss": "3.4.4",
     "typescript": "5.5.3"
   }
